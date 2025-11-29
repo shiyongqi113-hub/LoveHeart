@@ -89,7 +89,6 @@
         let touchTimer = 0; // 触屏蓄力计时器
 
         function init() {
-            // 🌟 核心：根据设备确定初始模式
             const initialMode = isMobile ? 'touch' : 'waiting'; 
             statusText.innerHTML = "正在启动星际引擎...";
 
@@ -143,10 +142,11 @@
             // --- 照片系统 ---
             let photoMesh = null;
             const photoGeo = new THREE.CircleGeometry(25, 64); 
+            // 🌟 修正 2.1: 移除 AdditiveBlending 和 depthWrite: false，提高清晰度
             const photoMat = new THREE.MeshBasicMaterial({
                 map: createPlaceholderPhoto(),
                 side: THREE.DoubleSide, transparent: true, opacity: 0, 
-                depthWrite: false, blending: THREE.AdditiveBlending
+                depthWrite: true // 恢复深度写入
             });
             photoMesh = new THREE.Mesh(photoGeo, photoMat);
             photoMesh.position.z = 5; 
@@ -256,7 +256,6 @@
                 nameSprite = createNameSprite();
                 scene.add(nameSprite); 
                 
-                // 🌟 状态提示根据模式变化
                 if (isMobile) {
                     statusText.innerHTML = "✨ 触屏模式 | 单指拖动 | 双指捏合触发魔法 ✨";
                 } else {
@@ -310,7 +309,6 @@
                 particlesGeometry.attributes.color.needsUpdate = true;
             }
             
-            // 移动端点击爆炸改为双指捏合，所以这里保留 PC 端的点击/触屏单点触发后备模式
             document.body.addEventListener('click', () => { if (!isMobile) triggerExplosion(); });
             
             // --- 触屏事件处理 ---
@@ -325,12 +323,10 @@
                     if (isExploding) return;
 
                     if (e.touches.length === 2) {
-                        // 双指触摸：计算初始距离
                         initialDistance = getDistance(e.touches[0], e.touches[1]);
                         lastScale = targetScale;
                         pinchTimer = 0; 
                     } else if (e.touches.length === 1) {
-                        // 单指触摸：用于旋转/方向控制
                         lastPointerX = e.touches[0].pageX;
                         lastPointerY = e.touches[0].pageY;
                         pinchTimer = 0;
@@ -342,14 +338,13 @@
                     if (isExploding) return;
 
                     if (e.touches.length === 2) {
-                        // 双指捏合/张开：控制缩放 (Scale)
                         const currentDistance = getDistance(e.touches[0], e.touches[1]);
-                        // 🌟 缩放控制
+                        
                         let scaleFactor = currentDistance / initialDistance;
                         targetScale = Math.max(0.5, Math.min(2.5, lastScale * scaleFactor)); 
                         
-                        // 🌟 捏合爆炸判定 (快速捏合)
-                        if (currentDistance / initialDistance < 0.6) { // 快速捏合到原距离的 60%
+                        // 捏合爆炸判定 (快速捏合)
+                        if (currentDistance / initialDistance < 0.6) {
                             pinchTimer++;
                             statusText.innerHTML = "⚡ 蓄力中... ⚡";
                             statusText.classList.add("charging");
@@ -359,14 +354,13 @@
                             }
                         }
                     } else if (e.touches.length === 1) {
-                        // 单指滑动：控制旋转 (Rotation)
                         const dx = e.touches[0].pageX - lastPointerX;
                         const dy = e.touches[0].pageY - lastPointerY;
                         
-                        // 🌟 旋转控制
-                        targetRotY += dx * 0.005; 
-                        targetRotX -= dy * 0.005;
-                        targetRotX = Math.max(-1.0, Math.min(1.0, targetRotX)); // 限制俯仰角
+                        // 🌟 修正 1: 左右旋转改为减法，实现拖动效果
+                        targetRotY -= dx * 0.005; 
+                        targetRotX -= dy * 0.005; // 保持不变
+                        targetRotX = Math.max(-1.0, Math.min(1.0, targetRotX)); 
                         
                         lastPointerX = e.touches[0].pageX;
                         lastPointerY = e.touches[0].pageY;
@@ -374,7 +368,6 @@
                 }, {passive: false});
 
                 document.body.addEventListener('touchend', () => {
-                    // 触摸结束：重置蓄力状态
                     pinchTimer = 0;
                     statusText.classList.remove("charging");
                     statusText.innerHTML = "✨ 触屏模式 | 单指拖动 | 双指捏合触发魔法 ✨";
@@ -386,7 +379,7 @@
             }
 
 
-            // --- 动画循环 (保持不变) ---
+            // --- 动画循环 (修正照片缩放) ---
             let mode = initialMode; 
             let time = 0;
             let targetRotX = 0, targetRotY = 0, targetScale = 1.0;
@@ -397,7 +390,6 @@
                 requestAnimationFrame(animate);
                 time += 0.02;
 
-                // --- 爆炸/粒子动画逻辑 (保持不变) ---
                 const positions = particlesGeometry.attributes.position.array;
                 const colorsArr = particlesGeometry.attributes.color.array;
 
@@ -441,7 +433,7 @@
                 }
                 particlesGeometry.attributes.position.needsUpdate = true;
 
-                // --- 交互更新逻辑 (保持不变) ---
+                // --- 交互更新逻辑 ---
                 curRotX += (targetRotX - curRotX) * 0.2; 
                 curRotY += (targetRotY - curRotY) * 0.2;
                 curScale += (targetScale - curScale) * 0.2;
@@ -454,9 +446,12 @@
                 heartGroup.scale.set(finalScale, finalScale, finalScale);
                 
                 if (photoMesh && yourPhotoUrl) {
+                    // 🌟 修正 2.2: 增大照片缩放因子 (30%)，让照片更突出、更清晰
+                    const photoScaleFactor = finalScale * 1.3; 
+                    
                     photoMesh.position.x = heartGroup.position.x;
                     photoMesh.position.y = heartGroup.position.y + Math.sin(time * 2) * 1; 
-                    photoMesh.scale.set(finalScale, finalScale, 1); 
+                    photoMesh.scale.set(photoScaleFactor, photoScaleFactor, 1); 
                 }
                 if (nameSprite) {
                     nameSprite.position.x = heartGroup.position.x;
@@ -486,7 +481,7 @@
                     
                     hands.setOptions({ 
                         maxNumHands: 1, 
-                        modelComplexity: 1, // PC端使用完整模型
+                        modelComplexity: 1, 
                         minDetectionConfidence: 0.5, 
                         minTrackingConfidence: 0.5 
                     });
@@ -510,7 +505,6 @@
                             const handSize = Math.sqrt(Math.pow(landmarks[5].x - wrist.x, 2) + Math.pow(landmarks[5].y - wrist.y, 2));
                             const snapDist = Math.sqrt(Math.pow(thumbTip.x - middleTip.x, 2) + Math.pow(thumbTip.y - middleTip.y, 2));
                             
-                            // PC 端，捏合阈值可以稍微严格一点
                             const isPinching = snapDist < (handSize * 0.25); 
                             
                             if (isPinching && !isExploding) {
@@ -518,7 +512,7 @@
                                 statusText.innerHTML = "⚡ 蓄力中... ⚡";
                                 statusText.classList.add("charging");
                                 targetScale *= 1.1; 
-                                if (pinchTimer > 10) { // PC端蓄力时间可以长一点
+                                if (pinchTimer > 10) { 
                                     triggerExplosion();
                                     pinchTimer = 0;
                                 }
@@ -548,7 +542,6 @@
                     
                     const cameraUtils = new Camera(videoElement, { 
                         onFrame: async () => { await hands.send({image: videoElement}); }, 
-                        // PC端使用稳定尺寸
                         width: 640, 
                         height: 480 
                     });
