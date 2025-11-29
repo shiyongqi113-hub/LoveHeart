@@ -64,7 +64,6 @@
     
     <script>
         // ================= 配置区域 =================
-        // 确保 photo.jpg 已上传到 GitHub 仓库根目录。
         const yourPhotoUrl = "photo.jpg"; 
         // ===========================================
 
@@ -84,7 +83,14 @@
             init();
         }
 
+        // --- 触屏/鼠标控制变量 ---
+        let lastTouchX = null;
+        let lastTouchY = null;
+        let touchTimer = 0; // 触屏蓄力计时器
+
         function init() {
+            // 🌟 核心：根据设备确定初始模式
+            const initialMode = isMobile ? 'touch' : 'waiting'; 
             statusText.innerHTML = "正在启动星际引擎...";
 
             const scene = new THREE.Scene();
@@ -147,21 +153,20 @@
             photoMesh.visible = false; 
             scene.add(photoMesh); 
 
-            // 优化：添加错误处理 (.catch) 解决 photo.jpg 404 警告
             if (yourPhotoUrl) {
                 textureLoader.load(yourPhotoUrl, (tex) => {
                     photoMesh.material.map = tex;
                     photoMesh.material.needsUpdate = true;
                 }, undefined, (err) => {
                     console.warn(`照片加载失败 (404/网络错误): ${yourPhotoUrl}`, err);
-                    photoMesh.visible = false; // 加载失败则隐藏照片
+                    photoMesh.visible = false; 
                 });
             } else {
                 photoMesh.visible = false;
             }
 
 
-            // --- 星空 ---
+            // --- 星空和粒子创建 (保持不变) ---
             function createStarField(count, size, range, color, opacity) {
                 const geo = new THREE.BufferGeometry();
                 const pos = new Float32Array(count * 3);
@@ -180,7 +185,6 @@
             scene.add(createStarField(isMobile ? 1500 : 3000, 1.0, 1500, 0x88ccff, 0.2)); 
             scene.add(createStarField(isMobile ? 400 : 800, 2.5, 800, 0xffccff, 0.5));
 
-            // --- 心形粒子 ---
             const particlesGeometry = new THREE.BufferGeometry();
             const particlesCount = isMobile ? 15000 : 20000; 
             const targetPositions = new Float32Array(particlesCount * 3);
@@ -231,7 +235,7 @@
             heartGroup.add(particlesMesh);
             scene.add(heartGroup);
 
-            // --- 名字 Sprite ---
+            // --- 名字 Sprite (保持不变) ---
             let nameSprite = null;
             function createNameSprite() {
                 const canvas = document.createElement('canvas');
@@ -251,10 +255,18 @@
             document.fonts.ready.then(() => {
                 nameSprite = createNameSprite();
                 scene.add(nameSprite); 
-                statusText.innerHTML = "✨ 星河已连接 | 捏合手指触发魔法 ✨";
+                
+                // 🌟 状态提示根据模式变化
+                if (isMobile) {
+                    statusText.innerHTML = "✨ 触屏模式 | 单指拖动 | 双指捏合触发魔法 ✨";
+                } else {
+                    statusText.innerHTML = "✨ 摄像头启动中 | 握拳缩小 | 捏合触发魔法 ✨";
+                }
+                
                 setTimeout(startTypewriter, 2000);
             });
 
+            // --- 文字打字机效果 (保持不变) ---
             const loveMessages = ["致 亲爱的小糕糕", "宇宙很大...", "星辰即使碎裂...", "也会化作光去找你。", "在这片专属星空里", "你永远是中心。", "❤️ 永远爱你 ❤️"];
             let msgIndex = 0; let charIndex = 0; let isDeleting = false;
             function startTypewriter() { loveTextContainer.style.opacity = 1; typeWriter(); }
@@ -268,7 +280,7 @@
                 setTimeout(typeWriter, typeSpeed);
             }
 
-            // --- 爆炸逻辑 ---
+            // --- 爆炸逻辑 (保持不变) ---
             let isExploding = false; let explosionTime = 0;
             let pinchTimer = 0; 
             
@@ -297,11 +309,86 @@
                 }
                 particlesGeometry.attributes.color.needsUpdate = true;
             }
-            document.body.addEventListener('click', triggerExplosion);
-            document.body.addEventListener('touchstart', (e)=>{ e.preventDefault(); triggerExplosion(); }, {passive: false});
+            
+            // 移动端点击爆炸改为双指捏合，所以这里保留 PC 端的点击/触屏单点触发后备模式
+            document.body.addEventListener('click', () => { if (!isMobile) triggerExplosion(); });
+            
+            // --- 触屏事件处理 ---
+            let initialDistance = 0;
+            let lastScale = 1.0;
+            let lastPointerX = 0;
+            let lastPointerY = 0;
+            
+            if (isMobile) {
+                document.body.addEventListener('touchstart', (e) => {
+                    e.preventDefault(); 
+                    if (isExploding) return;
 
-            // --- 动画循环 ---
-            let mode = 'waiting'; let time = 0;
+                    if (e.touches.length === 2) {
+                        // 双指触摸：计算初始距离
+                        initialDistance = getDistance(e.touches[0], e.touches[1]);
+                        lastScale = targetScale;
+                        pinchTimer = 0; 
+                    } else if (e.touches.length === 1) {
+                        // 单指触摸：用于旋转/方向控制
+                        lastPointerX = e.touches[0].pageX;
+                        lastPointerY = e.touches[0].pageY;
+                        pinchTimer = 0;
+                    }
+                }, {passive: false});
+
+                document.body.addEventListener('touchmove', (e) => {
+                    e.preventDefault(); 
+                    if (isExploding) return;
+
+                    if (e.touches.length === 2) {
+                        // 双指捏合/张开：控制缩放 (Scale)
+                        const currentDistance = getDistance(e.touches[0], e.touches[1]);
+                        // 🌟 缩放控制
+                        let scaleFactor = currentDistance / initialDistance;
+                        targetScale = Math.max(0.5, Math.min(2.5, lastScale * scaleFactor)); 
+                        
+                        // 🌟 捏合爆炸判定 (快速捏合)
+                        if (currentDistance / initialDistance < 0.6) { // 快速捏合到原距离的 60%
+                            pinchTimer++;
+                            statusText.innerHTML = "⚡ 蓄力中... ⚡";
+                            statusText.classList.add("charging");
+                            if (pinchTimer > 5) {
+                                triggerExplosion();
+                                pinchTimer = 0;
+                            }
+                        }
+                    } else if (e.touches.length === 1) {
+                        // 单指滑动：控制旋转 (Rotation)
+                        const dx = e.touches[0].pageX - lastPointerX;
+                        const dy = e.touches[0].pageY - lastPointerY;
+                        
+                        // 🌟 旋转控制
+                        targetRotY += dx * 0.005; 
+                        targetRotX -= dy * 0.005;
+                        targetRotX = Math.max(-1.0, Math.min(1.0, targetRotX)); // 限制俯仰角
+                        
+                        lastPointerX = e.touches[0].pageX;
+                        lastPointerY = e.touches[0].pageY;
+                    }
+                }, {passive: false});
+
+                document.body.addEventListener('touchend', () => {
+                    // 触摸结束：重置蓄力状态
+                    pinchTimer = 0;
+                    statusText.classList.remove("charging");
+                    statusText.innerHTML = "✨ 触屏模式 | 单指拖动 | 双指捏合触发魔法 ✨";
+                });
+            }
+
+            function getDistance(touch1, touch2) {
+                return Math.sqrt(Math.pow(touch1.pageX - touch2.pageX, 2) + Math.pow(touch1.pageY - touch2.pageY, 2));
+            }
+
+
+            // --- 动画循环 (保持不变) ---
+            let mode = initialMode; 
+            let time = 0;
             let targetRotX = 0, targetRotY = 0, targetScale = 1.0;
             let curRotX = 0, curRotY = 0, curScale = 1.0;
             const initialRotationX = -Math.PI / 12;
@@ -310,6 +397,7 @@
                 requestAnimationFrame(animate);
                 time += 0.02;
 
+                // --- 爆炸/粒子动画逻辑 (保持不变) ---
                 const positions = particlesGeometry.attributes.position.array;
                 const colorsArr = particlesGeometry.attributes.color.array;
 
@@ -337,12 +425,11 @@
                         if (allBack && explosionTime > 3.5) {
                             isExploding = false;
                             if(nameSprite) nameSprite.visible = true;
-                            statusText.innerHTML = "✨ 星河已连接 | 捏合手指触发魔法 ✨";
+                            statusText.innerHTML = isMobile ? "✨ 触屏模式 | 双指捏合触发魔法 ✨" : "✨ 星河已连接 | 捏合手指触发魔法 ✨";
                             statusText.classList.remove("highlight");
                         }
                     }
                 } else {
-                    // 强制照片消失逻辑 (仅当 photoUrl 存在时)
                     if(photoMesh && yourPhotoUrl) {
                         if (photoMesh.material.opacity > 0.02) {
                             photoMesh.material.opacity -= 0.03; 
@@ -354,7 +441,7 @@
                 }
                 particlesGeometry.attributes.position.needsUpdate = true;
 
-                // 交互灵敏度提升
+                // --- 交互更新逻辑 (保持不变) ---
                 curRotX += (targetRotX - curRotX) * 0.2; 
                 curRotY += (targetRotY - curRotY) * 0.2;
                 curScale += (targetScale - curScale) * 0.2;
@@ -390,106 +477,96 @@
             });
 
 
-            // --- MediaPipe / Camera 启动 (修正分辨率和错误捕获) ---
-            try {
-                const videoElement = document.getElementsByClassName('input_video')[0];
-                const Hands = window.Hands;
-                const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-                
-                hands.setOptions({ 
-                    maxNumHands: 1, 
-                    modelComplexity: isMobile ? 0 : 1, // 移动端用Lite模型(0)
-                    minDetectionConfidence: 0.4, 
-                    minTrackingConfidence: 0.4 
-                });
+            // --- MediaPipe / Camera 启动 (仅在 PC 端执行) ---
+            if (!isMobile) {
+                try {
+                    const videoElement = document.getElementsByClassName('input_video')[0];
+                    const Hands = window.Hands;
+                    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+                    
+                    hands.setOptions({ 
+                        maxNumHands: 1, 
+                        modelComplexity: 1, // PC端使用完整模型
+                        minDetectionConfidence: 0.5, 
+                        minTrackingConfidence: 0.5 
+                    });
 
-                hands.onResults((results) => {
-                    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                        const landmarks = results.multiHandLandmarks[0];
-                        const wrist = landmarks[0]; 
-                        const thumbTip = landmarks[4]; const middleTip = landmarks[12];
-                        
-                        // 1. 张开/握拳检测
-                        const tips = [8, 12, 16, 20]; const bases = [5, 9, 13, 17];
-                        let tD = 0; let bD = 0;
-                        for(let i=0; i<4; i++){
-                            tD += Math.sqrt(Math.pow(landmarks[tips[i]].x - wrist.x, 2) + Math.pow(landmarks[tips[i]].y - wrist.y, 2));
-                            bD += Math.sqrt(Math.pow(landmarks[bases[i]].x - wrist.x, 2) + Math.pow(landmarks[bases[i]].y - wrist.y, 2));
-                        }
-                        const ratio = tD / bD; 
-                        
-                        // 2. 自适应捏合判定
-                        const handSize = Math.sqrt(Math.pow(landmarks[5].x - wrist.x, 2) + Math.pow(landmarks[5].y - wrist.y, 2));
-                        const snapDist = Math.sqrt(Math.pow(thumbTip.x - middleTip.x, 2) + Math.pow(thumbTip.y - middleTip.y, 2));
-                        
-                        const isPinching = snapDist < (handSize * 0.3);
-                        
-                        if (isPinching && !isExploding) {
-                            pinchTimer++;
-                            statusText.innerHTML = "⚡ 蓄力中... ⚡";
-                            statusText.classList.add("charging");
-                            targetScale *= 1.1; 
-                            if (navigator.vibrate && pinchTimer % 5 === 0) navigator.vibrate(10);
-
-                            if (pinchTimer > 8) {
-                                triggerExplosion();
-                                pinchTimer = 0;
+                    hands.onResults((results) => {
+                        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                            const landmarks = results.multiHandLandmarks[0];
+                            const wrist = landmarks[0]; 
+                            const thumbTip = landmarks[4]; const middleTip = landmarks[12];
+                            
+                            // 1. 张开/握拳检测
+                            const tips = [8, 12, 16, 20]; const bases = [5, 9, 13, 17];
+                            let tD = 0; let bD = 0;
+                            for(let i=0; i<4; i++){
+                                tD += Math.sqrt(Math.pow(landmarks[tips[i]].x - wrist.x, 2) + Math.pow(landmarks[tips[i]].y - wrist.y, 2));
+                                bD += Math.sqrt(Math.pow(landmarks[bases[i]].x - wrist.x, 2) + Math.pow(landmarks[bases[i]].y - wrist.y, 2));
                             }
-                        } else {
-                            pinchTimer = 0;
-                            statusText.classList.remove("charging");
-
-                            if (ratio < 1.3) {
-                                targetScale = 0.5;
-                                if (!isExploding) statusText.innerHTML = "✊ 握拳缩小";
+                            const ratio = tD / bD; 
+                            
+                            // 2. 自适应捏合判定
+                            const handSize = Math.sqrt(Math.pow(landmarks[5].x - wrist.x, 2) + Math.pow(landmarks[5].y - wrist.y, 2));
+                            const snapDist = Math.sqrt(Math.pow(thumbTip.x - middleTip.x, 2) + Math.pow(thumbTip.y - middleTip.y, 2));
+                            
+                            // PC 端，捏合阈值可以稍微严格一点
+                            const isPinching = snapDist < (handSize * 0.25); 
+                            
+                            if (isPinching && !isExploding) {
+                                pinchTimer++;
+                                statusText.innerHTML = "⚡ 蓄力中... ⚡";
+                                statusText.classList.add("charging");
+                                targetScale *= 1.1; 
+                                if (pinchTimer > 10) { // PC端蓄力时间可以长一点
+                                    triggerExplosion();
+                                    pinchTimer = 0;
+                                }
                             } else {
-                                let s = (ratio - 1.1) / 0.6; 
-                                targetScale = 0.5 + (Math.max(0, Math.min(1, s)) * 1.8); 
-                                if (!isExploding) statusText.innerHTML = "✨ 星河已连接 | 捏合触发魔法 ✨";
-                            }
-                        }
+                                pinchTimer = 0;
+                                statusText.classList.remove("charging");
 
-                        if (mode !== 'hand') { mode = 'hand'; }
-                        const middleBase = landmarks[9]; 
-                        targetRotY = (middleBase.x - 0.5) * 4.0;
-                        let tilt = (middleBase.z - wrist.z) * 12; 
-                        targetRotX = Math.max(-0.5, Math.min(0.5, tilt));
-                    } else { 
-                        if (mode === 'hand') { targetScale = 1.0; targetRotX = 0; targetRotY = 0; pinchTimer = 0; } 
-                    }
-                });
-                
-                // 关键修正：将移动端分辨率改为 320x240，确保宽度和高度都是 4 的倍数，避免 WASM 崩溃
-                const cameraUtils = new Camera(videoElement, { 
-                    onFrame: async () => { await hands.send({image: videoElement}); }, 
-                    width: isMobile ? 320 : 640, 
-                    height: isMobile ? 240 : 480 
-                });
-                
-                cameraUtils.start().catch((error) => {
-                    console.error("Camera Start Error:", error);
-                    let errorMsg = "❌ 摄像头启动失败 [未知错误]";
+                                if (ratio < 1.3) {
+                                    targetScale = 0.5;
+                                    if (!isExploding) statusText.innerHTML = "✊ 握拳缩小";
+                                } else {
+                                    let s = (ratio - 1.1) / 0.6; 
+                                    targetScale = 0.5 + (Math.max(0, Math.min(1, s)) * 1.8); 
+                                    if (!isExploding) statusText.innerHTML = "✨ 星河已连接 | 捏合手指触发魔法 ✨";
+                                }
+                            }
+
+                            if (mode !== 'hand') { mode = 'hand'; }
+                            const middleBase = landmarks[9]; 
+                            targetRotY = (middleBase.x - 0.5) * 4.0;
+                            let tilt = (middleBase.z - wrist.z) * 12; 
+                            targetRotX = Math.max(-0.5, Math.min(0.5, tilt));
+                        } else { 
+                            if (mode === 'hand') { targetScale = 1.0; targetRotX = 0; targetRotY = 0; pinchTimer = 0; } 
+                        }
+                    });
                     
-                    if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                        errorMsg = "❌ 摄像头权限被拒绝，请检查浏览器设置！";
-                    } else if (error.name === 'SecurityError') {
-                        errorMsg = "❌ 必须在 HTTPS 或本地服务器 (localhost) 上运行！";
-                    }
+                    const cameraUtils = new Camera(videoElement, { 
+                        onFrame: async () => { await hands.send({image: videoElement}); }, 
+                        // PC端使用稳定尺寸
+                        width: 640, 
+                        height: 480 
+                    });
                     
-                    statusText.innerHTML = errorMsg;
+                    cameraUtils.start().catch((error) => {
+                        console.error("Camera Start Error:", error);
+                        statusText.innerHTML = "❌ 摄像头启动失败，请检查权限。点击屏幕作为后备。";
+                        statusText.style.color = "#ff5555";
+                        statusText.classList.remove("highlight");
+                        mode = 'mouse';
+                    });
+                    
+                } catch(e) { 
+                    console.error("AI Initialization Error:", e); 
+                    statusText.innerHTML = "❌ AI 初始化失败，已切换为鼠标点击模式。";
                     statusText.style.color = "#ff5555";
-                    statusText.classList.remove("highlight");
-                    
                     mode = 'mouse';
-                    setTimeout(() => { 
-                        statusText.innerHTML = "未检测到手势，请点击屏幕触发烟花"; 
-                    }, 500); 
-                });
-                
-            } catch(e) { 
-                console.error("AI Initialization Error:", e); 
-                statusText.innerHTML = "❌ AI 初始化失败，请检查网络连接或资源路径";
-                statusText.style.color = "#ff5555";
+                }
             }
         }
     </script>
