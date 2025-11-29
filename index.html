@@ -5,25 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>To 小糕糕 - 掌心星河</title>
     <style>
-        /* 1. 移动端防误触与字体优化 */
         @import url('https://fonts.googleapis.com/css2?family=Zhi+Mang+Xing&display=swap');
         body { 
             margin: 0; overflow: hidden; background-color: #000; 
-            cursor: pointer; 
-            touch-action: none; /* 禁止手机默认的滑动翻页行为 */
-            -webkit-user-select: none; /* 禁止长按选中文字 */
+            cursor: pointer; touch-action: none; -webkit-user-select: none;
         }
         
         #status-container {
             position: absolute; top: 20px; left: 0; right: 0;
             text-align: center; pointer-events: none; z-index: 30;
-            padding: 0 20px; /* 防止文字贴边 */
+            padding: 0 10px;
         }
         #status-text {
             display: inline-block;
             font-family: 'Zhi Mang Xing', 'KaiTi', cursive;
             font-size: 16px; color: rgba(255, 255, 255, 0.9);
-            background: rgba(0, 0, 0, 0.5); padding: 8px 15px; border-radius: 30px;
+            background: rgba(0, 0, 0, 0.5); padding: 8px 16px; border-radius: 30px;
             backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.2);
             transition: all 0.2s;
         }
@@ -32,13 +29,12 @@
         .fist { color: #aaaaff; border-color: #aaaaff; }
 
         #love-text {
-            position: absolute; bottom: 10%; left: 0; right: 0;
+            position: absolute; bottom: 12%; left: 0; right: 0;
             text-align: center; pointer-events: none; z-index: 20;
             font-family: 'Zhi Mang Xing', 'KaiTi', cursive;
-            font-size: 28px; color: #ffccdd; /* 手机端字号微调 */
+            font-size: 28px; color: #ffccdd;
             text-shadow: 0 0 10px #ff3399; 
-            opacity: 0; transition: opacity 1s;
-            width: 100%;
+            opacity: 0; transition: opacity 1s; width: 100%;
         }
         .cursor::after { content: '|'; animation: blink 1s infinite; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
@@ -60,7 +56,7 @@
 <body>
 
     <div id="status-container">
-        <span id="status-text">正在初始化星空...</span>
+        <span id="status-text">正在初始化...</span>
     </div>
 
     <div id="love-text"><span id="text-content"></span><span class="cursor"></span></div>
@@ -75,20 +71,18 @@
         const loveTextContainer = document.getElementById('love-text');
         const textContent = document.getElementById('text-content');
         const startTime = Date.now(); 
-
-        // 检测是否为移动端
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
         window.onerror = function(msg) {
             if (!msg.includes("video")) {
-                statusText.innerHTML = "⚠️ 请使用HTTPS协议或本地服务器";
+                statusText.innerHTML = "⚠️ 请在HTTPS或本地服务器运行";
                 statusText.style.color = "#ff5555";
             }
             return false;
         };
 
         if (typeof THREE === 'undefined') {
-            statusText.innerHTML = "❌ 网络加载慢，请刷新重试";
+            statusText.innerHTML = "❌ 资源加载超时，请刷新";
         } else {
             init();
         }
@@ -101,17 +95,12 @@
             scene.background = new THREE.Color(0x050208);
 
             const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 3000);
-            
-            // 2. 移动端适配：竖屏时把相机拉远，防止心形溢出屏幕
-            if (window.innerWidth < window.innerHeight) {
-                camera.position.z = 180; // 竖屏距离
-            } else {
-                camera.position.z = 120; // 横屏/PC距离
-            }
+            // 移动端适配：竖屏拉远相机
+            camera.position.z = (window.innerWidth < window.innerHeight) ? 180 : 120;
 
             const renderer = new THREE.WebGLRenderer({ antialias: false });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            // 3. 性能优化：手机端限制像素比，防止发烫
+            // 性能优化：限制像素比
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2));
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
             renderer.toneMappingExposure = 0.8;
@@ -150,6 +139,7 @@
                 return new THREE.CanvasTexture(canvas);
             }
 
+            // --- 照片系统 ---
             let photoMesh = null;
             const photoGeo = new THREE.CircleGeometry(25, 64); 
             const photoMat = new THREE.MeshBasicMaterial({
@@ -167,6 +157,7 @@
                 photoMesh.material.needsUpdate = true;
             });
 
+            // --- 星空 ---
             function createStarField(count, size, range, color, opacity) {
                 const geo = new THREE.BufferGeometry();
                 const pos = new Float32Array(count * 3);
@@ -185,9 +176,10 @@
             scene.add(createStarField(isMobile ? 1500 : 3000, 1.0, 1500, 0x88ccff, 0.2)); 
             scene.add(createStarField(isMobile ? 400 : 800, 2.5, 800, 0xffccff, 0.5));
 
-            // 4. 性能优化：手机端减少粒子数量
+            // --- 心形粒子 ---
             const particlesGeometry = new THREE.BufferGeometry();
-            const particlesCount = isMobile ? 15000 : 25000; 
+            // 移动端减少粒子数以保证流畅
+            const particlesCount = isMobile ? 15000 : 20000; 
             const targetPositions = new Float32Array(particlesCount * 3);
             const currentPositions = new Float32Array(particlesCount * 3);
             const velocities = new Float32Array(particlesCount * 3);
@@ -226,7 +218,7 @@
             particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3)); 
             
             const heartMaterial = new THREE.PointsMaterial({
-                map: circleTexture, size: isMobile? 1.5 : 1.1, vertexColors: true, 
+                map: circleTexture, size: isMobile ? 1.5 : 1.1, vertexColors: true, 
                 transparent: true, opacity: 0.95,
                 blending: THREE.AdditiveBlending, depthWrite: false,
             });
@@ -236,6 +228,7 @@
             heartGroup.add(particlesMesh);
             scene.add(heartGroup);
 
+            // --- 名字 Sprite ---
             let nameSprite = null;
             function createNameSprite() {
                 const canvas = document.createElement('canvas');
@@ -272,11 +265,13 @@
                 setTimeout(typeWriter, typeSpeed);
             }
 
+            // --- 爆炸逻辑 ---
             let isExploding = false; let explosionTime = 0;
             let pinchTimer = 0; 
             
             function triggerExplosion() {
                 if (isExploding) return;
+                // 防开局误炸
                 if (Date.now() - startTime < 3000) return;
 
                 isExploding = true; explosionTime = 0;
@@ -288,8 +283,6 @@
                 }
 
                 statusText.innerHTML = "✨ 怦然心动 ✨"; statusText.classList.add("highlight");
-
-                // 震动反馈 (Android支持较好)
                 if (navigator.vibrate) navigator.vibrate(200);
 
                 const colorsArr = particlesGeometry.attributes.color.array;
@@ -303,14 +296,9 @@
                 particlesGeometry.attributes.color.needsUpdate = true;
             }
             document.body.addEventListener('click', triggerExplosion);
-            // 移动端触摸触发支持
-            document.body.addEventListener('touchstart', (e) => {
-                 // 允许触摸触发作为备选，防止AI在某些手机不工作
-                 // e.preventDefault(); 
-                 // triggerExplosion(); 
-            }, {passive: true});
+            document.body.addEventListener('touchstart', (e)=>{ e.preventDefault(); triggerExplosion(); }, {passive: false});
 
-
+            // --- 动画循环 ---
             let mode = 'waiting'; let time = 0;
             let targetRotX = 0, targetRotY = 0, targetScale = 1.0;
             let curRotX = 0, curRotY = 0, curScale = 1.0;
@@ -325,7 +313,7 @@
 
                 if (isExploding) {
                     explosionTime += 0.02;
-                    if(photoMesh && photoMesh.material.opacity < 1.0) photoMesh.material.opacity += 0.05;
+                    if(photoMesh && photoMesh.material.opacity < 1.0) photoMesh.material.opacity += 0.04;
 
                     for(let i=0; i<particlesCount; i++) {
                         positions[i*3] += velocities[i*3]; positions[i*3+1] += velocities[i*3+1]; positions[i*3+2] += velocities[i*3+2];
@@ -352,6 +340,7 @@
                         }
                     }
                 } else {
+                    // 强制照片消失逻辑
                     if(photoMesh) {
                         if (photoMesh.material.opacity > 0.02) {
                             photoMesh.material.opacity -= 0.03; 
@@ -363,6 +352,7 @@
                 }
                 particlesGeometry.attributes.position.needsUpdate = true;
 
+                // 交互灵敏度提升
                 curRotX += (targetRotX - curRotX) * 0.2; 
                 curRotY += (targetRotY - curRotY) * 0.2;
                 curScale += (targetScale - curScale) * 0.2;
@@ -394,20 +384,29 @@
                 camera.updateProjectionMatrix();
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 composer.setSize(window.innerWidth, window.innerHeight);
-                // 窗口变化时重新判断距离
                 camera.position.z = (window.innerWidth < window.innerHeight) ? 180 : 120;
             });
 
             try {
                 const videoElement = document.getElementsByClassName('input_video')[0];
+                const Hands = window.Hands;
                 const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-                hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+                
+                // 性能优化：移动端降低模型复杂度
+                hands.setOptions({ 
+                    maxNumHands: 1, 
+                    modelComplexity: isMobile ? 0 : 1, // 移动端用Lite模型(0)，更流畅
+                    minDetectionConfidence: 0.4, // 降低阈值，更易识别
+                    minTrackingConfidence: 0.4 
+                });
+
                 hands.onResults((results) => {
                     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                         const landmarks = results.multiHandLandmarks[0];
                         const wrist = landmarks[0]; 
                         const thumbTip = landmarks[4]; const middleTip = landmarks[12]; const indexTip = landmarks[8];
                         
+                        // 1. 张开/握拳检测
                         const tips = [8, 12, 16, 20]; const bases = [5, 9, 13, 17];
                         let tD = 0; let bD = 0;
                         for(let i=0; i<4; i++){
@@ -416,18 +415,23 @@
                         }
                         const ratio = tD / bD; 
                         
+                        // 2. 自适应捏合判定 (改为相对距离)
+                        // 计算手掌大小基准 (食指根部到手腕距离)
+                        const handSize = Math.sqrt(Math.pow(landmarks[5].x - wrist.x, 2) + Math.pow(landmarks[5].y - wrist.y, 2));
                         const snapDist = Math.sqrt(Math.pow(thumbTip.x - middleTip.x, 2) + Math.pow(thumbTip.y - middleTip.y, 2));
-                        // 放宽判定，便于手机操作
-                        const isPinching = snapDist < 0.1; 
+                        
+                        // 相对距离判定：如果指尖距离小于手掌大小的 20%，算捏合
+                        // 这样无论手离远近，判定标准都一致
+                        const isPinching = snapDist < (handSize * 0.3); 
 
                         if (isPinching && !isExploding) {
                             pinchTimer++;
                             statusText.innerHTML = "⚡ 蓄力中... ⚡";
                             statusText.classList.add("charging");
                             targetScale *= 1.1; 
-                            if (navigator.vibrate && pinchTimer % 5 === 0) navigator.vibrate(10); // 蓄力震动
+                            if (navigator.vibrate && pinchTimer % 5 === 0) navigator.vibrate(10);
 
-                            // 手机端蓄力稍快一点 (0.2s)
+                            // 蓄力 0.2s 左右
                             if (pinchTimer > 8) {
                                 triggerExplosion();
                                 pinchTimer = 0;
@@ -455,7 +459,13 @@
                         if (mode === 'hand') { targetScale = 1.0; targetRotX = 0; targetRotY = 0; pinchTimer = 0; } 
                     }
                 });
-                const cameraUtils = new Camera(videoElement, { onFrame: async () => { await hands.send({image: videoElement}); }, width: 640, height: 480 });
+                
+                // 移动端降低视频采样率以提高速度
+                const cameraUtils = new Camera(videoElement, { 
+                    onFrame: async () => { await hands.send({image: videoElement}); }, 
+                    width: isMobile ? 480 : 640, 
+                    height: isMobile ? 640 : 480 
+                });
                 cameraUtils.start();
                 setTimeout(() => { if(mode === 'waiting') { mode = 'mouse'; statusText.innerHTML = "未检测到摄像头，请点击屏幕触发烟花"; } }, 8000);
             } catch(e) { console.error("AI Error:", e); }
