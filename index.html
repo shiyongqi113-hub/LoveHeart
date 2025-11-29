@@ -75,7 +75,6 @@
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
         window.onerror = function(msg) {
-            // 保持此句，捕获 Three.js 资源加载等底层错误
             return false;
         };
 
@@ -280,7 +279,6 @@
                 isExploding = true; explosionTime = 0;
                 if(nameSprite) nameSprite.visible = false;
                 
-                // 仅在照片URL存在时才尝试显示照片
                 if(photoMesh && yourPhotoUrl) {
                     photoMesh.visible = true;
                     photoMesh.material.opacity = 0;
@@ -368,7 +366,6 @@
                 const finalScale = curScale * currentBeat;
                 heartGroup.scale.set(finalScale, finalScale, finalScale);
                 
-                // 仅在 photoMesh 存在且 photoUrl 有效时才更新位置
                 if (photoMesh && yourPhotoUrl) {
                     photoMesh.position.x = heartGroup.position.x;
                     photoMesh.position.y = heartGroup.position.y + Math.sin(time * 2) * 1; 
@@ -393,7 +390,7 @@
             });
 
 
-            // --- MediaPipe / Camera 启动 (优化错误捕获) ---
+            // --- MediaPipe / Camera 启动 (修正分辨率和错误捕获) ---
             try {
                 const videoElement = document.getElementsByClassName('input_video')[0];
                 const Hands = window.Hands;
@@ -407,9 +404,6 @@
                 });
 
                 hands.onResults((results) => {
-                    // 调试用：请使用远程调试工具检查此输出，确认模型是否识别到手
-                    // console.log("Hands Detected:", results.multiHandLandmarks ? results.multiHandLandmarks.length : 0);
-                    
                     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                         const landmarks = results.multiHandLandmarks[0];
                         const wrist = landmarks[0]; 
@@ -424,11 +418,11 @@
                         }
                         const ratio = tD / bD; 
                         
-                        // 2. 自适应捏合判定 (改为相对距离)
+                        // 2. 自适应捏合判定
                         const handSize = Math.sqrt(Math.pow(landmarks[5].x - wrist.x, 2) + Math.pow(landmarks[5].y - wrist.y, 2));
                         const snapDist = Math.sqrt(Math.pow(thumbTip.x - middleTip.x, 2) + Math.pow(thumbTip.y - middleTip.y, 2));
                         
-                        const isPinching = snapDist < (handSize * 0.3); // 如果指尖距离小于手掌大小的 30%
+                        const isPinching = snapDist < (handSize * 0.3);
                         
                         if (isPinching && !isExploding) {
                             pinchTimer++;
@@ -465,13 +459,13 @@
                     }
                 });
                 
+                // 🌟 关键修正：将移动端分辨率改为 320x240，确保宽度和高度都是 4 的倍数，避免 WASM 崩溃
                 const cameraUtils = new Camera(videoElement, { 
                     onFrame: async () => { await hands.send({image: videoElement}); }, 
-                    width: isMobile ? 480 : 640, 
-                    height: isMobile ? 640 : 480 
+                    width: isMobile ? 320 : 640, 
+                    height: isMobile ? 240 : 480 
                 });
                 
-                // 关键修改：添加 catch 处理摄像头启动错误
                 cameraUtils.start().catch((error) => {
                     console.error("Camera Start Error:", error);
                     let errorMsg = "❌ 摄像头启动失败 [未知错误]";
@@ -486,7 +480,6 @@
                     statusText.style.color = "#ff5555";
                     statusText.classList.remove("highlight");
                     
-                    // 启动失败，切换到鼠标/点击模式
                     mode = 'mouse';
                     setTimeout(() => { 
                         statusText.innerHTML = "未检测到手势，请点击屏幕触发烟花"; 
